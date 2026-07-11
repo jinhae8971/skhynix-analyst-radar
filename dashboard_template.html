@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>메모리 애널리스트 레이더</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0f1a; --panel:#111a2b; --panel2:#0e1524; --card:#0e1524; --line:#1e2b45;
+    --ink:#e8eef8; --sub:#8fa2c4; --dim:#5f7095;
+    --buy:#22c55e; --hold:#f59e0b; --sell:#ef4444; --na:#64748b;
+    --accent:#38bdf8; --up:#22c55e; --down:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 70% -10%,#15233d 0%,var(--bg) 55%);
+    color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    -webkit-font-smoothing:antialiased;padding:28px 20px 60px;line-height:1.5;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:20px}
+  .title{display:flex;align-items:center;gap:12px}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px var(--accent)}
+  h1{font-size:23px;font-weight:700;letter-spacing:-.3px}
+  h1 span{color:var(--sub);font-weight:500;font-size:15px;margin-left:8px}
+  .meta{text-align:right;font-size:12.5px;color:var(--dim)}
+  .meta b{color:var(--sub);font-weight:600}
+  .badge{display:inline-block;font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;color:var(--sub);margin-top:6px}
+
+  .tabs{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
+  .tab{background:var(--panel2);border:1px solid var(--line);color:var(--sub);
+    padding:9px 16px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;gap:8px;transition:.15s}
+  .tab:hover{color:var(--ink);border-color:#2c3d5e}
+  .tab.on{background:linear-gradient(180deg,#16233c,#0e1524);border-color:var(--accent);color:var(--ink)}
+  .tab .tcur{font-size:10px;font-weight:600;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:1px 5px;letter-spacing:.3px}
+  .tab.on .tcur{color:var(--accent);border-color:rgba(56,189,248,.4)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .kpi{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px}
+  .kpi .lab{font-size:12px;color:var(--sub);margin-bottom:9px;letter-spacing:.2px}
+  .kpi .val{font-size:25px;font-weight:750;letter-spacing:-.5px}
+  .kpi .sub{font-size:12px;color:var(--dim);margin-top:6px}
+  .pos{color:var(--up)} .neg{color:var(--down)}
+  .pill{display:inline-flex;gap:5px;align-items:center;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:8px}
+  .pill.b{background:rgba(34,197,94,.13);color:var(--buy)}
+  .pill.h{background:rgba(245,158,11,.13);color:var(--hold)}
+  .pill.s{background:rgba(239,68,68,.13);color:var(--sell)}
+
+  .grid{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:16px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:16px;padding:18px 18px 14px}
+  .card h2{font-size:14px;font-weight:650;color:var(--ink);margin-bottom:3px}
+  .card p.hint{font-size:11.5px;color:var(--dim);margin-bottom:12px}
+  .chartbox{position:relative;width:100%}
+  .h-tall{height:290px} .h-mid{height:230px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  td.r,th.r{text-align:right}
+  tbody tr:hover{background:rgba(56,189,248,.05)}
+  a.rep{color:var(--accent);text-decoration:none}
+  a.rep:hover{text-decoration:underline}
+  .tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px}
+  .tag.up{background:rgba(34,197,94,.14);color:var(--up)}
+  .tag.down{background:rgba(248,113,113,.14);color:var(--down)}
+  .op{font-weight:700;font-size:12px}
+  .op.BUY{color:var(--buy)} .op.HOLD{color:var(--hold)} .op.SELL{color:var(--sell)} .op.NA{color:var(--na)}
+  .muted{color:var(--dim)}
+  tr.clk{cursor:pointer}
+  tr.clk:hover{background:rgba(56,189,248,.09)}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(4,8,16,.72);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:60;padding:18px}
+  .modal.on{display:flex}
+  .mbox{background:var(--card);border:1px solid #26324e;border-radius:16px;max-width:900px;width:100%;
+    max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+  .mhd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+    padding:16px 20px;border-bottom:1px solid var(--line)}
+  .mhd h3{margin:0;font-size:18px;font-weight:700}
+  .mx{background:none;border:none;color:#8aa0c6;font-size:17px;cursor:pointer;line-height:1;padding:4px}
+  .mx:hover{color:#e6edf7}
+  .mbd{overflow:auto;padding:4px 20px 12px}
+  .mbd table{width:100%;border-collapse:collapse;font-size:13px}
+  .mbd th{position:sticky;top:0;background:var(--card);color:var(--dim);text-align:left;
+    padding:9px 8px;border-bottom:1px solid #26324e;font-weight:600;font-size:11px;
+    text-transform:uppercase;letter-spacing:.4px;z-index:1}
+  .mbd td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .mbd td.ttl{color:#c7d3e8;max-width:340px;line-height:1.4}
+  .mbd .syn{color:#86d0f0;font-size:11.5px;margin-top:4px;line-height:1.4;padding-left:8px;border-left:2px solid rgba(56,189,248,.4)}
+  .mft{padding:11px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
+  footer{margin-top:22px;text-align:center;font-size:11.5px;color:var(--dim)}
+  @media(max-width:860px){
+    .kpis{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr}
+    .meta{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title"><span class="dot"></span>
+      <h1 id="htitle"></h1><span id="hcode" style="color:var(--sub);font-weight:500;font-size:15px"></span>
+    </div>
+    <div class="meta">
+      <div>업데이트 <b id="hgen"></b></div>
+      <div>데이터 · <b id="hsrc"></b></div>
+      <div class="badge" id="hn"></div>
+    </div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid">
+    <div class="card">
+      <h2>목표주가 컨센서스 추이</h2>
+      <p class="hint" id="hintTrend"></p>
+      <div class="chartbox h-tall"><canvas id="cTrend"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>투자의견 분포</h2>
+      <p class="hint">최신 의견 기준 · 유효 커버리지</p>
+      <div class="chartbox h-mid"><canvas id="cDist"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>최신 목표주가 <span id="barTitleTag" style="font-size:11px;color:#5f7095;font-weight:500"></span></h2>
+    <p class="hint" id="hintBar"></p>
+    <div class="chartbox" id="barBox"><canvas id="cBar"></canvas></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>최근 투자의견·목표가 변동</h2>
+      <p class="hint" id="hintRev"></p>
+      <div style="max-height:360px;overflow:auto"><table id="tRev"></table></div>
+    </div>
+    <div class="card">
+      <h2 id="covTitle">커버리지</h2>
+      <p class="hint" id="hintCov"></p>
+      <div style="max-height:360px;overflow:auto"><table id="tBroker"></table></div>
+    </div>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<!-- 리서치사 상세 모달 -->
+<div id="modal" class="modal">
+  <div class="mbox">
+    <div class="mhd">
+      <div><h3 id="mkTitle"></h3><p id="mkSub" class="hint" style="margin:4px 0 0"></p></div>
+      <button class="mx" onclick="closeModal()" aria-label="닫기">✕</button>
+    </div>
+    <div id="mkBody" class="mbd"></div>
+    <div class="mft" id="mft"></div>
+  </div>
+</div>
+
+<script>
+const PAYLOAD = /*__DATA__*/null;
+const OP_KR={BUY:"매수",HOLD:"중립",SELL:"매도","N/A":"의견없음"};
+const OP_COL={BUY:"#22c55e",HOLD:"#f59e0b",SELL:"#ef4444","N/A":"#64748b"};
+const RANK={SELL:0,HOLD:1,BUY:2};
+Chart.defaults.color="#8fa2c4";
+Chart.defaults.font.family="'Inter','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+Chart.defaults.font.size=11;
+
+let CUR="KRW";                 // 활성 탭 통화
+const won=v=>(v==null||v==="")?"-":(CUR==="USD"?"$"+Number(v).toLocaleString("en-US"):"₩"+Number(v).toLocaleString("ko-KR"));
+const man=v=>(v==null||v==="")?"-":(CUR==="USD"?"$"+Number(v).toLocaleString("en-US"):"₩"+Math.round(v/10000).toLocaleString("ko-KR")+"만");
+const axisMoney=v=>CUR==="USD"?"$"+Number(v).toLocaleString("en-US"):"₩"+(v/10000).toLocaleString("ko-KR")+"만";
+const ymTs=ym=>{const[y,m]=ym.split("-").map(Number);return new Date(y,m-1,15).getTime();};
+const dTs=d=>new Date(d+"T00:00:00").getTime();
+
+let A=null;                    // 활성 종목 analytics
+const CH={cTrend:null,cDist:null,cBar:null};
+function destroyCharts(){for(const k in CH){if(CH[k]){CH[k].destroy();CH[k]=null;}}}
+
+// ---------- 리서치사 상세 모달 ----------
+function openBroker(name){
+  if(!A) return;
+  const kr=A.currency==="KRW";
+  const rs=(A.reports||[]).filter(r=>r.source===name).sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
+  if(!rs.length) return;
+  let pt=null,po=null;
+  const built=rs.map(r=>{
+    let dl="";
+    if(r.target){if(pt!==null&&r.target!==pt){const up=r.target>pt,pct=(r.target-pt)/pt*100;dl=` <span class="${up?'pos':'neg'} num">${up?'▲':'▼'}${pct>0?'+':''}${pct.toFixed(1)}%</span>`;}pt=r.target;}
+    let ochg="";
+    if(r.opinion in RANK){if(po&&po!==r.opinion){const up=RANK[r.opinion]>RANK[po];ochg=` <span class="${up?'pos':'neg'}" style="font-size:11px">(${OP_KR[po]}→${OP_KR[r.opinion]})</span>`;}po=r.opinion;}
+    const opCls=r.opinion==="N/A"?"NA":r.opinion;
+    const op=`<span class="op ${opCls}">${OP_KR[r.opinion]||r.opinion_raw||"-"}</span>${ochg}`;
+    let cells=`<td class="num muted" style="white-space:nowrap">${r.date}</td>`
+             +`<td style="white-space:nowrap">${op}</td>`
+             +`<td class="r num" style="white-space:nowrap"><b>${man(r.target)}</b>${dl}</td>`;
+    if(kr){
+      const up=(r.upside!=null)?`<span class="${r.upside>=0?'pos':'neg'} num">${r.upside>0?'+':''}${r.upside}%</span>`:'<span class="muted">-</span>';
+      const cp=r.current_price?`<span class="muted" style="font-size:11px">현재가 ${man(r.current_price)}</span>`:'';
+      cells+=`<td class="r" style="white-space:nowrap">${up}<br>${cp}</td>`;
+    }
+    cells+=`<td class="ttl">${(r.title||"").replace(/</g,"&lt;")}${r.synopsis?`<div class="syn">${String(r.synopsis).replace(/</g,"&lt;")}</div>`:""}</td>`;
+    if(kr){const pdf=r.report_idx?`<a class="rep" target="_blank" rel="noopener" href="http://consensus.hankyung.com/analysis/downpdf?report_idx=${r.report_idx}">원문</a>`:"-";cells+=`<td class="r">${pdf}</td>`;}
+    return `<tr>${cells}</tr>`;
+  });
+  built.reverse();
+  const last=rs[rs.length-1];
+  const stale=(A.broker_latest[name]||{}).stale;
+  document.getElementById("mkTitle").innerHTML=name+(stale?` <span class="tag" style="background:rgba(100,116,139,.18);color:#94a3b8">휴면</span>`:"");
+  const lastUp=(kr&&last.upside!=null)?` · 발표시 상승여력 <b class="${last.upside>=0?'pos':'neg'}">${last.upside>0?'+':''}${last.upside}%</b>`:"";
+  document.getElementById("mkSub").innerHTML=`${rs.length}개 · 최신 ${OP_KR[last.opinion]||"-"} · 목표가 <b>${man(last.target)}</b> (${last.date})${lastUp}`;
+  let head=`<th>일자</th><th>의견</th><th class="r">목표가 · 변동</th>`;
+  if(kr) head+=`<th class="r">상승여력<br><span style="font-weight:400;text-transform:none">(발표시)</span></th>`;
+  head+=`<th>리포트 논지${kr?' · 요약':''}</th>`;
+  if(kr) head+=`<th class="r">원문</th>`;
+  document.getElementById("mkBody").innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${built.join("")}</tbody></table>`;
+  document.getElementById("mft").innerHTML = kr
+    ? "▲/▼ 는 직전 리포트 대비 변동 · 굵은 제목은 원문 제목, 파란 줄 요약은 원문을 재서술한 논지(원문 인용 아님) · 원문 클릭 시 한경 컨센서스로 이동"
+    : "▲/▼ 는 직전 조정 대비 변동 · 미국 리서치사의 등급/목표가 변경 이력(출처 Yahoo Finance) · 개별 리포트 원문은 제공되지 않음";
+  document.getElementById("modal").classList.add("on");
+}
+function closeModal(){document.getElementById("modal").classList.remove("on");}
+
+// ---------- 개별 렌더러 ----------
+function renderKPIs(a){
+  const s=a.target_stats,d=a.distribution,ms=a.momentum_short,ml=a.momentum_long;
+  const total=(d.BUY||0)+(d.HOLD||0)+(d.SELL||0);
+  const buyPct=total?Math.round((d.BUY||0)/total*100):0;
+  const netS=(ms.target_up+ms.op_up)-(ms.target_down+ms.op_down);
+  const netL=(ml.target_up+ml.op_up)-(ml.target_down+ml.op_down);
+  const netCls=netS>0?"pos":(netS<0?"neg":"");
+  const kpis=[
+    {lab:"목표주가 평균 컨센서스",val:man(s.mean),sub:`중앙값 ${man(s.median)} · ${s.count||0}곳`},
+    {lab:"목표주가 밴드",val:`${man(s.min)} ~ ${man(s.max)}`,sub:`최고 ${s.max_broker||"-"} · 최저 ${s.min_broker||"-"}`},
+    {lab:"투자의견 컨센서스",val:`<span class="num">${buyPct}%</span> <span class="muted" style="font-size:15px">매수</span>`,
+     sub:`<span class="pill b">매수 ${d.BUY||0}</span> <span class="pill h">중립 ${d.HOLD||0}</span> <span class="pill s">매도 ${d.SELL||0}</span>`},
+    {lab:`최근 30일 리비전 (순 ${netS>=0?"상향":"하향"})`,val:`<span class="${netCls} num">${netS>=0?"▲":"▼"}${Math.abs(netS)}</span>`,
+     sub:`목표가 ▲${ms.target_up}/▼${ms.target_down} · 90일 순${netL>=0?"▲":"▼"}${Math.abs(netL)}`},
+  ];
+  document.getElementById("kpis").innerHTML=kpis.map(k=>`<div class="kpi"><div class="lab">${k.lab}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div></div>`).join("");
+}
+
+function renderTrend(a){
+  // 각 점에 '같은 리서치사의 직전 리포트 대비' 목표가 방향(UP/DOWN/FLAT/NEW)과 변동% 부여
+  const _seq=[...a.reports].filter(r=>r.target).sort((x,y)=>x.date<y.date?-1:(x.date>y.date?1:0));
+  const _last={};
+  const pts=_seq.map(r=>{
+    const prev=_last[r.source];
+    let dir="NEW",pct=null;
+    if(prev!=null){pct=(r.target-prev)/prev*100;dir=r.target>prev?"UP":(r.target<prev?"DOWN":"FLAT");}
+    _last[r.source]=r.target;
+    return {x:dTs(r.date),y:r.target,op:r.opinion,src:r.source,dir,pct};
+  });
+  const DIRBG={UP:"#22c55ecc",DOWN:"#ef4444",FLAT:"#64748b99",NEW:"#7c8aa599"};
+  const mx=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.max}));
+  const mn=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.min}));
+  const hi=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.hi}));
+  const lo=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.lo}));
+  const line=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.avg,n:m.n,sd:m.sd,mn:m.min,mx:m.max}));
+  CH.cTrend=new Chart(document.getElementById("cTrend"),{
+    data:{datasets:[
+      {type:"line",label:"최저~최고 범위",data:mx,fill:"+1",backgroundColor:"rgba(56,189,248,.07)",borderColor:"rgba(56,189,248,.28)",borderWidth:0,tension:.3,pointRadius:0,pointHoverRadius:0,order:6},
+      {type:"line",label:"__mn",data:mn,fill:false,borderColor:"transparent",borderWidth:0,tension:.3,pointRadius:0,pointHoverRadius:0,order:6},
+      {type:"line",label:"±1σ 분산",data:hi,fill:"+1",backgroundColor:"rgba(56,189,248,.17)",borderColor:"rgba(56,189,248,.5)",borderWidth:0,tension:.3,pointRadius:0,pointHoverRadius:0,order:5},
+      {type:"line",label:"__lo",data:lo,fill:false,borderColor:"transparent",borderWidth:0,tension:.3,pointRadius:0,pointHoverRadius:0,order:5},
+      {type:"line",label:"컨센서스 90일 이동평균",data:line,borderColor:"#38bdf8",borderWidth:2.5,fill:false,tension:.3,pointRadius:0,pointHoverRadius:5,order:2},
+      {type:"scatter",label:"개별 리포트",data:pts,order:1,
+        pointRadius:c=>c.raw.dir==="DOWN"?5:(c.raw.dir==="UP"?4:3),
+        pointHoverRadius:c=>c.raw.dir==="DOWN"?8:6,
+        backgroundColor:c=>DIRBG[c.raw.dir]||"#64748b",
+        borderColor:c=>c.raw.dir==="DOWN"?"#fca5a5":"rgba(10,15,26,.55)",
+        borderWidth:c=>c.raw.dir==="DOWN"?1.5:1},
+    ]},
+    options:{maintainAspectRatio:false,responsive:true,
+      interaction:{mode:"nearest",intersect:true},
+      onClick:(e,els,ch)=>{const el=els.find(x=>ch.data.datasets[x.datasetIndex].label==="개별 리포트");if(el&&pts[el.index].src)openBroker(pts[el.index].src);},
+      onHover:(e,els)=>{if(e.native)e.native.target.style.cursor=els.some(x=>x.element&&x.element.$context&&x.element.$context.dataset&&x.element.$context.dataset.label==="개별 리포트")?"pointer":"default";},
+      scales:{
+        x:{type:"linear",ticks:{callback:v=>{const dt=new Date(v);return (dt.getMonth()===0||dt.getMonth()===6)?`${dt.getFullYear()}.${dt.getMonth()+1}`:"";},maxRotation:0,autoSkip:false},grid:{color:"rgba(30,43,69,.5)"}},
+        y:{ticks:{callback:axisMoney},grid:{color:"rgba(30,43,69,.5)"}},
+      },
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8,padding:12,filter:it=>!it.text.startsWith("__")&&it.text!=="개별 리포트"}},
+        tooltip:{filter:i=>i.dataset.label==="개별 리포트"||i.dataset.label==="컨센서스 90일 이동평균",
+          callbacks:{title:i=>new Date(i[0].raw.x).toISOString().slice(0,10),
+            label:c=>{
+              if(c.raw.src){const r=c.raw;const dd=r.dir==="DOWN"?`▼${r.pct.toFixed(1)}%`:(r.dir==="UP"?`▲+${r.pct.toFixed(1)}%`:(r.dir==="FLAT"?"유지":"신규"));return `${r.src} · ${OP_KR[r.op]} · ${won(r.y)} · ${dd}`;}
+              return `90일 이동평균 ${won(c.raw.y)} · ${c.raw.n}건 · σ${man(c.raw.sd)} · ${man(c.raw.mn)}~${man(c.raw.mx)}`;
+            }}}},
+    }});
+}
+
+function renderDist(a){
+  const d=a.distribution,dl=["BUY","HOLD","SELL"];
+  CH.cDist=new Chart(document.getElementById("cDist"),{
+    type:"doughnut",
+    data:{labels:dl.map(x=>OP_KR[x]),datasets:[{data:dl.map(x=>d[x]||0),backgroundColor:dl.map(x=>OP_COL[x]),borderColor:"#0e1524",borderWidth:3,hoverOffset:6}]},
+    options:{maintainAspectRatio:false,cutout:"62%",
+      plugins:{legend:{position:"bottom",labels:{usePointStyle:true,boxWidth:8,padding:14}},
+        tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw}곳`}}}}
+  });
+}
+
+function renderBar(a){
+  const bl=Object.entries(a.broker_latest).filter(([,v])=>v.target&&!v.stale).sort((x,y)=>y[1].target-x[1].target);
+  document.getElementById("barBox").style.height=(Math.max(bl.length*28,140))+"px";
+  CH.cBar=new Chart(document.getElementById("cBar"),{
+    type:"bar",
+    data:{labels:bl.map(x=>x[0]),datasets:[{data:bl.map(x=>x[1].target),backgroundColor:bl.map(x=>OP_COL[x[1].opinion]+"cc"),borderColor:bl.map(x=>OP_COL[x[1].opinion]),borderWidth:1,borderRadius:5,barPercentage:.74}]},
+    options:{indexAxis:"y",maintainAspectRatio:false,responsive:true,
+      onClick:(e,els)=>{if(els.length)openBroker(bl[els[0].index][0]);},
+      onHover:(e,els)=>{if(e.native)e.native.target.style.cursor=els.length?"pointer":"default";},
+      scales:{x:{ticks:{callback:axisMoney},grid:{color:"rgba(30,43,69,.5)"}},y:{grid:{display:false}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${OP_KR[bl[c.dataIndex][1].opinion]} · ${won(c.raw)}`}}}}
+  });
+}
+
+function renderRev(a){
+  const kr=a.currency==="KRW";
+  const rows=a.revisions.slice(0,40).map(r=>{
+    const up=r.dir==="UP";
+    const tag=`<span class="tag ${up?'up':'down'}">${up?'▲ 상향':'▼ 하향'}</span>`;
+    let chg;
+    if(r.kind==="target") chg=`${man(r.from)} → <b>${man(r.to)}</b> <span class="${up?'pos':'neg'} num">(${r.pct>0?'+':''}${r.pct}%)</span>`;
+    else chg=`${OP_KR[r.from]} → <b>${OP_KR[r.to]}</b>`;
+    const link=(kr&&r.report_idx)?`<a class="rep" target="_blank" href="http://consensus.hankyung.com/analysis/downpdf?report_idx=${r.report_idx}">PDF</a>`:"";
+    const last=kr?`<td class="r">${link}</td>`:"";
+    return `<tr class="clk" data-broker="${r.broker}"><td class="num muted">${r.date}</td><td>${tag}</td><td>${r.broker}</td><td>${chg}</td>${last}</tr>`;
+  }).join("");
+  const th=kr?`<th class="r">원문</th>`:"";
+  document.getElementById("tRev").innerHTML=`<thead><tr><th>날짜</th><th>구분</th><th>${kr?'증권사':'리서치사'}</th><th>변동</th>${th}</tr></thead><tbody>${rows}</tbody>`;
+}
+
+function renderCov(a){
+  const kr=a.currency==="KRW";
+  const be=Object.entries(a.broker_latest).sort((x,y)=>{if(x[1].stale!==y[1].stale)return x[1].stale?1:-1;return (y[1].target||0)-(x[1].target||0);});
+  const brows=be.map(([b,v])=>{
+    const opCls=v.opinion==="N/A"?"NA":v.opinion;
+    const link=(kr&&v.report_idx)?`<a class="rep" target="_blank" href="http://consensus.hankyung.com/analysis/downpdf?report_idx=${v.report_idx}">${v.date}</a>`:v.date;
+    const nm=v.stale?`${b} <span class="tag" style="background:rgba(100,116,139,.18);color:#94a3b8">휴면</span>`:b;
+    const rs=v.stale?' style="opacity:.5"':'';
+    return `<tr class="clk" data-broker="${b}"${rs}><td>${nm}</td><td class="op ${opCls}">${OP_KR[v.opinion]||v.opinion_raw}</td><td class="r num"><b>${man(v.target)}</b></td><td class="r num muted">${link}</td></tr>`;
+  }).join("");
+  document.getElementById("tBroker").innerHTML=`<thead><tr><th>${kr?'증권사':'리서치사'}</th><th>최신의견</th><th class="r">목표주가</th><th class="r">일자</th></tr></thead><tbody>${brows}</tbody>`;
+}
+
+// ---------- 종목 빌드 ----------
+function build(key){
+  const a=PAYLOAD.data[key]; if(!a) return;
+  A=a; CUR=a.currency||"KRW"; closeModal();
+  const kr=CUR==="KRW", mo=Math.round((a.active_days||180)/30);
+  document.getElementById("htitle").textContent=a.stock.name+" 애널리스트 레이더";
+  document.getElementById("hcode").textContent=" · "+a.stock.code;
+  document.getElementById("hgen").textContent=a.generated;
+  document.getElementById("hsrc").textContent=a.source;
+  document.getElementById("hn").textContent="분석 "+a.n_reports+"건 · 유효 "+a.n_active+"곳 · 휴면 "+a.n_stale;
+  document.getElementById("hintTrend").innerHTML=`점 = 개별 ${kr?'리포트':'조정'} · 색은 <b style="color:#22c55e">▲상향</b> / <b style="color:#ef4444">▼하향</b> / <span style="color:#8fa2c4">유지·신규</span> (직전 리포트 대비) · <b style="color:#7cc4f2">±1σ</b>(진한)·최저~최고(옅은) 밴드 · 점 클릭 시 ${kr?'증권사':'리서치사'} 이력`;
+  document.getElementById("barTitleTag").textContent=kr?"· 유효 커버리지":"· 최근 조정 리서치사";
+  document.getElementById("hintBar").textContent=`최근 ${mo}개월 내 ${kr?'리포트 발간 증권사':'조정한 리서치사'} · 목표가 내림차순 · 막대 클릭 시 이력`;
+  document.getElementById("hintRev").innerHTML=`직전 대비 상향 ▲ / 하향 ▼ · <b style="color:#7cc4f2">행 클릭 시 ${kr?'변경 사유(논지)·원문':'변경 이력'}</b>`;
+  document.getElementById("covTitle").textContent=kr?"증권사별 커버리지":"리서치사별 커버리지";
+  document.getElementById("hintCov").textContent=`최신 의견 · 목표가 · 클릭 시 ${kr?'증권사':'리서치사'} 이력`;
+  renderKPIs(a); destroyCharts(); renderTrend(a); renderDist(a); renderBar(a); renderRev(a); renderCov(a);
+  document.getElementById("foot").textContent=`${a.stock.name} Analyst Radar · 자동 생성 ${a.generated} · 출처 ${a.source} · 투자판단의 책임은 이용자 본인에게 있습니다`;
+}
+
+function initTabs(){
+  const tb=document.getElementById("tabs");
+  tb.innerHTML=PAYLOAD.symbols.map((s,i)=>`<button class="tab" data-key="${s.key}">${s.name}<span class="tcur">${s.currency}</span></button>`).join("");
+  tb.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+    tb.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); if(history.replaceState)history.replaceState(null,"","#"+b.dataset.key); build(b.dataset.key);
+  }));
+  const keys=PAYLOAD.symbols.map(s=>s.key);
+  const want=(location.hash||"").replace("#","");
+  const start=keys.includes(want)?want:keys[0];
+  tb.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.key===start));
+  if(keys.length) build(start);
+}
+window.addEventListener("hashchange",()=>{
+  const k=(location.hash||"").replace("#","");
+  if(PAYLOAD.symbols.some(s=>s.key===k)){
+    document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.key===k));
+    build(k);
+  }
+});
+
+document.addEventListener("click",e=>{const tr=e.target.closest("tr[data-broker]");if(tr&&!e.target.closest("a"))openBroker(tr.dataset.broker);});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal();});
+initTabs();
+</script>
+</body>
+</html>

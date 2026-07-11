@@ -1,0 +1,64 @@
+name: SK Hynix Analyst Radar
+
+# 평일 KST 08:00(장 시작 전) + 16:30(장 마감 후) 자동 실행.
+# 스크립트는 '신규 리포트'가 있을 때만 텔레그램을 발송하므로 중복 알림이 없다.
+on:
+  schedule:
+    - cron: "0 23 * * 0-4"    # KST 평일 08:00 (UTC 전날 일~목 23:00)
+    - cron: "30 7 * * 1-5"    # KST 평일 16:30 (UTC 월~금 07:30)
+  workflow_dispatch:           # 수동 실행/테스트
+
+permissions:
+  contents: write              # state.json / dashboard 커밋용
+
+concurrency:
+  group: skhynix-radar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+
+      - name: Run radar
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DASHBOARD_URL: "https://jinhae8971.github.io/skhynix-analyst-radar/"
+          TZ: "Asia/Seoul"
+        run: python skhynix_ratings.py
+
+      - name: Commit state & dashboard
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f state.json summaries.json dashboard.html index.html
+          if git diff --cached --quiet; then
+            echo "변경 없음 - 커밋 생략"
+          else
+            git commit -m "chore: radar update $(date +%F' '%H:%M) [skip ci]"
+            git push
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os, requests
+          requests.post(
+              f"https://api.telegram.org/bot{os.environ['TELEGRAM_TOKEN']}/sendMessage",
+              json={"chat_id": os.environ["TELEGRAM_CHAT_ID"],
+                    "text": "❌ SK하이닉스 애널리스트 레이더 실행 실패 - GitHub Actions 로그를 확인하세요."},
+              timeout=10)
+          PY
