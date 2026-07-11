@@ -413,7 +413,23 @@ def _latest_with(lst, valid):
     return None
 
 
-def build_analytics(reports, meta):
+def fetch_live_price(meta):
+    """yfinance로 종목 현재가 조회 (국내=코드.KS 원화 / 마이크론=티커 달러). 실패 시 None."""
+    try:
+        import yfinance as yf
+        sym = meta["ticker"] if meta["source"] == "yahoo" else meta["code"] + ".KS"
+        fi = yf.Ticker(sym).fast_info
+        p = fi.get("lastPrice") or fi.get("last_price") or fi.get("previousClose")
+        if not p:
+            return None
+        p = float(p)
+        return round(p) if meta.get("currency", "KRW") == "KRW" else round(p, 2)
+    except Exception as e:
+        print(f"[price] {meta.get('key')} 현재가 조회 실패: {e}")
+        return None
+
+
+def build_analytics(reports, meta, current_price=None):
     by_broker = defaultdict(list)
     for r in reports:
         by_broker[r["source"]].append(r)
@@ -530,6 +546,7 @@ def build_analytics(reports, meta):
         "stock": {"name": meta["name"], "code": meta.get("code", "")},
         "currency": meta.get("currency", "KRW"),
         "source": meta.get("src_label", ""),
+        "current_price": current_price,
         "n_reports": len(reports),
         "n_active": len(active),
         "n_stale": len(broker_latest) - len(active),
@@ -693,7 +710,7 @@ def main():
             print(f"[{key}] 리포트 없음 - 스킵")
             continue
 
-        a = build_analytics(reports, meta)
+        a = build_analytics(reports, meta, current_price=fetch_live_price(meta))
         payload["data"][key] = a
         payload["symbols"].append({
             "key": key, "name": meta["name"], "code": meta.get("code", ""),

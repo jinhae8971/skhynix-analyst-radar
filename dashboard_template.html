@@ -262,6 +262,21 @@ function renderTrend(a){
   const hi=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.hi}));
   const lo=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.lo}));
   const line=a.monthly_series.map(m=>({x:ymTs(m.ym),y:m.avg,n:m.n,sd:m.sd,mn:m.min,mx:m.max}));
+  const cp=a.current_price;
+  const hlinePlugin={id:"cpLine",afterDatasetsDraw(chart){
+    if(cp==null)return;
+    const sc=chart.scales.y,ca=chart.chartArea,y=sc.getPixelForValue(cp);
+    if(y<ca.top||y>ca.bottom)return;
+    const ctx=chart.ctx;ctx.save();
+    ctx.strokeStyle="rgba(226,232,240,.55)";ctx.lineWidth=1.5;ctx.setLineDash([6,4]);
+    ctx.beginPath();ctx.moveTo(ca.left,y);ctx.lineTo(ca.right,y);ctx.stroke();ctx.setLineDash([]);
+    const label="현재가 "+man(cp);ctx.font="600 11px Inter,sans-serif";
+    const tw=ctx.measureText(label).width,bx=ca.left+8,by=y-10;
+    ctx.fillStyle="rgba(15,21,36,.92)";ctx.fillRect(bx,by-8,tw+12,16);
+    ctx.strokeStyle="rgba(226,232,240,.4)";ctx.lineWidth=1;ctx.strokeRect(bx,by-8,tw+12,16);
+    ctx.fillStyle="#e8eef8";ctx.textBaseline="middle";ctx.fillText(label,bx+6,by);
+    ctx.restore();
+  }};
   CH.cTrend=new Chart(document.getElementById("cTrend"),{
     data:{datasets:[
       {type:"line",label:"최저~최고 범위",data:mx,fill:"+1",backgroundColor:"rgba(56,189,248,.07)",borderColor:"rgba(56,189,248,.28)",borderWidth:0,tension:.3,pointRadius:0,pointHoverRadius:0,order:6},
@@ -291,7 +306,7 @@ function renderTrend(a){
               if(c.raw.src){const r=c.raw;const dd=r.dir==="DOWN"?`▼${r.pct.toFixed(1)}%`:(r.dir==="UP"?`▲+${r.pct.toFixed(1)}%`:(r.dir==="FLAT"?"유지":"신규"));return `${r.src} · ${OP_KR[r.op]} · ${won(r.y)} · ${dd}`;}
               return `90일 이동평균 ${won(c.raw.y)} · ${c.raw.n}건 · σ${man(c.raw.sd)} · ${man(c.raw.mn)}~${man(c.raw.mx)}`;
             }}}},
-    }});
+    },plugins:[hlinePlugin]});
 }
 
 function renderDist(a){
@@ -358,7 +373,7 @@ function build(key){
   document.getElementById("hgen").textContent=a.generated;
   document.getElementById("hsrc").textContent=a.source;
   document.getElementById("hn").textContent="분석 "+a.n_reports+"건 · 유효 "+a.n_active+"곳 · 휴면 "+a.n_stale;
-  document.getElementById("hintTrend").innerHTML=`점 = 개별 ${kr?'리포트':'조정'} · 색은 <b style="color:#22c55e">▲상향</b> / <b style="color:#ef4444">▼하향</b> / <span style="color:#8fa2c4">유지·신규</span> (직전 리포트 대비) · <b style="color:#7cc4f2">±1σ</b>(진한)·최저~최고(옅은) 밴드 · 점 클릭 시 ${kr?'증권사':'리서치사'} 이력`;
+  document.getElementById("hintTrend").innerHTML=`점 = 개별 ${kr?'리포트':'조정'} · 색은 <b style="color:#22c55e">▲상향</b> / <b style="color:#ef4444">▼하향</b> / <span style="color:#8fa2c4">유지·신규</span> (직전 대비) · <b style="color:#7cc4f2">±1σ</b>·최저~최고 밴드 · <span style="color:#e8eef8">┈ 현재가</span> · 점 클릭 시 ${kr?'증권사':'리서치사'} 이력`;
   document.getElementById("barTitleTag").textContent=kr?"· 유효 커버리지":"· 최근 조정 리서치사";
   document.getElementById("hintBar").textContent=`최근 ${mo}개월 내 ${kr?'리포트 발간 증권사':'조정한 리서치사'} · 목표가 내림차순 · 막대 클릭 시 이력`;
   document.getElementById("hintRev").innerHTML=`직전 대비 상향 ▲ / 하향 ▼ · <b style="color:#7cc4f2">행 클릭 시 ${kr?'변경 사유(논지)·원문':'변경 이력'}</b>`;
